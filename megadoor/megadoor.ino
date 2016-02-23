@@ -1,77 +1,95 @@
+/**
+ * MEGADOOR - It's a thing.
+ *
+ * This firmware is intended for an Atmega328P;
+ * it will read NFC UIDs from an i2c connection
+ * and unlock a door if the card is valid.
+ */
+
+/////////////
+// HEADERS //
+/////////////
+
+// Included to keep compatibility between PIO and IDE
 #include <Arduino.h>
+// Included because something's broken in PIO
 #include <Wire.h>
 #include <SPI.h>
+// Included for the firmware
 #include <Adafruit_PN532.h>
 #include <EEPROM.h>
 
-// If using the breakout with SPI, define the pins for SPI communication.
-//#define PN532_SCK  (2)
-//#define PN532_MOSI (3)
-//#define PN532_SS   (4)
-//#define PN532_MISO (5)
+//////////
+// PINS //
+//////////
 
-// If using the breakout or shield with I2C, define just the pins connected
-// to the IRQ and reset lines.  Use the values below (2, 3) for the shield!
+// Required for I2C
 #define PN532_IRQ   (6)
-#define PN532_RESET (5)  // Not connected by default on the NFC Shield
+#define PN532_RESET (5)
+// Trips the transistor switch
+#define PIN_DOOR_UNLOCK (9) // Wired to NPN transistor
+// Have Lassy fetch help!
+#define PIN_TROUBLE (13) // Wired to LED
+/* !I2C!
+  There's an implied SDA&SCL pin here.
+  The Adafruid_PN532 library uses the ATmega's
+  default I2C pins (27&28 on the DIP) to reach
+  the NFC board. Make sure these pins are wired.
+  Both of these pins also require a pull-up resistor
+  because neither the ATmega nor PN532 boards have
+  the hardware.
+  Put a 1.5K resistor to VCC on each line.
+ */
 
-// Uncomment just _one_ line below depending on how your breakout or shield
-// is connected to the Arduino:
+/////////////
+// GLOBALS //
+/////////////
 
-// Use this line for a breakout with a software SPI connection (recommended):
-//Adafruit_PN532 nfc(PN532_SCK, PN532_MISO, PN532_MOSI, PN532_SS);
-
-// Use this line for a breakout with a hardware SPI connection.  Note that
-// the PN532 SCK, MOSI, and MISO pins need to be connected to the Arduino's
-// hardware SPI SCK, MOSI, and MISO pins.  On an Arduino Uno these are
-// SCK = 13, MOSI = 11, MISO = 12.  The SS line can be any digital IO pin.
-//Adafruit_PN532 nfc(PN532_SS);
-
-// Or use this line for a breakout or shield with an I2C connection:
+// Instantiate the NFC library
 Adafruit_PN532 nfc(PN532_IRQ, PN532_RESET);
+// Set debugging
+//#define DEBUG
+// Set version
+#define VERSION 0.1-3
 
-
+/**
+ * setup() - a poem
+ * We do what we must \
+ * because they make us.
+ */
 void setup() {
   Serial.begin(9600);
+  #ifdef DEBUG
+  Serial.print("megadoor version "); Serial.println(VERSION);
+  Serial.print("I have "); Serial.print(E2END); Serial.println(" bytes EEPROM.");
+  #endif
 
-  Serial.println("megadoor version 0.1-2");
-  Serial.print("I have this much eeprom: ");
-  Serial.println(E2END);
-
-  pinMode(9, OUTPUT);
-
-  Serial.println("Hello!");
+  pinMode(PIN_DOOR_UNLOCK, OUTPUT);
 
   nfc.begin();
-
   uint32_t versiondata = nfc.getFirmwareVersion();
   if (! versiondata) {
     Serial.print("Didn't find PN53x board");
-    while (1); // halt
+    while (1) // Sad blink
+    {
+      delay(1000);
+      digitalWrite(PIN_TROUBLE, !digitalRead(PIN_TROUBLE));
+    }
   }
   // Got ok data, print it out!
-  Serial.print("Found chip PN5"); Serial.println((versiondata>>24) & 0xFF, HEX);
-  Serial.print("Firmware ver. "); Serial.print((versiondata>>16) & 0xFF, DEC);
-  Serial.print('.'); Serial.println((versiondata>>8) & 0xFF, DEC);
-
+  #ifdef DEBUG
+    Serial.print("Found chip PN5"); Serial.println((versiondata>>24) & 0xFF, HEX);
+    Serial.print("Firmware ver. "); Serial.print((versiondata>>16) & 0xFF, DEC);
+    Serial.print('.'); Serial.println((versiondata>>8) & 0xFF, DEC);
+  #endif
   // configure board to read RFID tags
   nfc.SAMConfig();
-
-  Serial.println("Waiting for an ISO14443A Card ...");
+  #ifdef DEBUG
+    Serial.println("Waiting for an ISO14443A Card ...");
+  #endif
 }
 
 void loop() {
-
-//  byte testData[] = { 0x11,0x11,0x11,0x11,0x22,0x33,0x44 };
-//  if ( checkCard(testData,7) ) {
-//    Serial.println("ok");
-//  } else {
-//    Serial.println("no");
-//  }
-//
-//  delay(10000);
-
-
   uint8_t success;
   uint8_t uid[] = { 0, 0, 0, 0, 0, 0, 0 };  // Buffer to store the returned UID
   uint8_t uidLength;                        // Length of the UID (4 or 7 bytes depending on ISO14443A card type)
@@ -81,112 +99,53 @@ void loop() {
   // if the uid is 4 bytes (Mifare Classic) or 7 bytes (Mifare Ultralight)
   success = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength);
 
-  if (success) {
+  if (success)
+  {
     // Display some basic information about the card
-    Serial.println("Found an ISO14443A card");
-    Serial.print("  UID Length: ");Serial.print(uidLength, DEC);Serial.println(" bytes");
-    Serial.print("  UID Value: ");
-    nfc.PrintHex(uid, uidLength);
-    Serial.println("");
+    #ifdef DEBUG
+      Serial.println("Found an ISO14443A card");
+      Serial.print("  UID Length: ");Serial.print(uidLength, DEC);Serial.println(" bytes");
+      Serial.print("  UID Value: ");
+      nfc.PrintHex(uid, uidLength);
+      Serial.println("");
+    #else
+      nfc.PrintHex(uid, uidLength);
+    #endif
 
-    if (uidLength == 4)
+    // Reference UID against known valid
+    if ( checkCard(uid,uidLength) )
     {
-      if ( checkCard(uid,4) ) {
-        Serial.println("ok, 4 byte uid");
-        digitalWrite(9, HIGH);
-        delay(1000);
-        digitalWrite(9, LOW);
-      } else {
-        Serial.println("nope 4.");
-      }
-
-//      // We probably have a Mifare Classic card ...
-//      Serial.println("Seems to be a Mifare Classic card (4 byte UID)");
-//
-//      // Now we need to try to authenticate it for read/write access
-//      // Try with the factory default KeyA: 0xFF 0xFF 0xFF 0xFF 0xFF 0xFF
-//      Serial.println("Trying to authenticate block 4 with default KEYA value");
-//      uint8_t keya[6] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
-//
-//    // Start with block 4 (the first block of sector 1) since sector 0
-//    // contains the manufacturer data and it's probably better just
-//    // to leave it alone unless you know what you're doing
-//      success = nfc.mifareclassic_AuthenticateBlock(uid, uidLength, 4, 0, keya);
-//
-//      if (success)
-//      {
-//        Serial.println("Sector 1 (Blocks 4..7) has been authenticated");
-//        uint8_t data[16];
-//
-//        // If you want to write something to block 4 to test with, uncomment
-//    // the following line and this text should be read back in a minute
-//        //memcpy(data, (const uint8_t[]){ 'a', 'd', 'a', 'f', 'r', 'u', 'i', 't', '.', 'c', 'o', 'm', 0, 0, 0, 0 }, sizeof data);
-//        // success = nfc.mifareclassic_WriteDataBlock (4, data);
-//
-//        // Try to read the contents of block 4
-//        success = nfc.mifareclassic_ReadDataBlock(4, data);
-//
-//        if (success)
-//        {
-//          // Data seems to have been read ... spit it out
-//          Serial.println("Reading Block 4:");
-//          nfc.PrintHexChar(data, 16);
-//          Serial.println("");
-//
-//          // Wait a bit before reading the card again
-//          delay(1000);
-//        }
-//        else
-//        {
-//          Serial.println("Ooops ... unable to read the requested block.  Try another key?");
-//        }
-//      }
-//      else
-//      {
-//        Serial.println("Ooops ... authentication failed: Try another key?");
-//      }
-    }
-
-    if (uidLength == 7)
-    {
-      if ( checkCard(uid,7) ) {
-        Serial.println("ok, 7 byte uid");
-        digitalWrite(9, HIGH);
-        delay(1000);
-        digitalWrite(9, LOW);
-      } else {
-        Serial.println("nope 7.");
-      }
-//      // We probably have a Mifare Ultralight card ...
-//      Serial.println("Seems to be a Mifare Ultralight tag (7 byte UID)");
-//
-//      for (int xi = 0; xi < 45; xi++)
-//      {
-//        // Try to read the first general-purpose user page (#4)
-//        Serial.print("Reading page ");
-//        Serial.println(xi);
-//        uint8_t data[32];
-//        success = nfc.mifareultralight_ReadPage (xi, data);
-//        if (success)
-//        {
-//          // Data seems to have been read ... spit it out
-//          nfc.PrintHexChar(data, 4);
-//          //Serial.println("");
-//
-//          // Wait a bit before reading the card again
-//          delay(10);
-//        }
-//        else
-//        {
-//          Serial.println("Ooops ... unable to read the requested page!?");
-//        }
-//      }
+      #ifdef DEBUG
+        Serial.print("UID length "); Serial.print(uidLength); Serial.println(" accepted.");
+      #endif
+      digitalWrite(PIN_DOOR_UNLOCK, HIGH);
       delay(1000);
+      digitalWrite(PIN_DOOR_UNLOCK, LOW);
+    }
+    else
+    {
+      #ifdef DEBUG
+        Serial.print("UID length "); Serial.print(uidLength); Serial.println(" rejected.");
+      #endif
+      digitalWrite(PIN_TROUBLE, HIGH);
+      delay(1000);
+      digitalWrite(PIN_TROUBLE, LOW);
     }
   }
-
 }
 
+
+/*
+  checkCard()
+
+  Usage:
+   byte testData[] = { 0x11,0x11,0x11,0x11,0x22,0x33,0x44 };
+   if ( checkCard(testData,7) ) {
+     Serial.println("ok");
+   } else {
+     Serial.println("no");
+   }
+ */
 boolean checkCard(const byte* cardUid, uint8_t cardUidLength) {
 
   //Serial.print("Checking a uid of length "); Serial.println(cardUidLength);
