@@ -49,8 +49,10 @@
 Adafruit_PN532 nfc(PN532_IRQ, PN532_RESET);
 // Set debugging
 //#define DEBUG
-// Set version
-#define VERSION 0.1-3
+// Set version MAJ.MIN-REV
+#define VER_MAJ 0
+#define VER_MIN 1
+#define VER_REV 3
 
 /**
  * setup() - a poem
