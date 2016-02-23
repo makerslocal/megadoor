@@ -1,3 +1,6 @@
+#include <Arduino.h>
+#include <Wire.h>
+#include <SPI.h>
 #include <Adafruit_PN532.h>
 #include <EEPROM.h>
 
