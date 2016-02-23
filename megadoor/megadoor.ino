@@ -6,6 +6,20 @@
  * and unlock a door if the card is valid.
  */
 
+/* TODO
+  In no particular order:
+  - Order the TODO list
+  - Implement external EEPROM
+  - Organize EEPROM structure.
+    I'm thinking a struct with
+    configurable settings at the front,
+    followed by a list or table of
+    NFC and user data.
+  - Implement LPM
+  - Implement USB Host (to make USB keys work)
+  - Implement BIGSIGN and/or RQ Welcome message
+ */
+
 /////////////
 // HEADERS //
 /////////////
