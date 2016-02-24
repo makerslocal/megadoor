@@ -241,7 +241,7 @@ void loop() {
     }
 
     // Reference UID against known valid
-    if ( uid_check(uid,uidLength) )
+    if ( uid_check(uid,uidLength) >= 0 )
     {
       if (debug)
       {
@@ -331,7 +331,10 @@ void buffer_process(bool loud /*= false*/)
 
 void uid_remove(uint8_t uid[], uint8_t uidLength, bool loud /*= false*/)
 {
-  // do things
+  if (uid_check(uid, uidLength))
+  {
+    if (loud) Serial.println("UID exists, removing.")
+  }
 }
 
 void uid_add(uint8_t uid[], uint8_t uidLength, bool loud /*= false*/)
@@ -339,10 +342,10 @@ void uid_add(uint8_t uid[], uint8_t uidLength, bool loud /*= false*/)
   // do things
 }
 
-bool uid_check(const byte* cardUid, uint8_t cardUidLength) {
+uint16_t uid_check(uint8_t* uid, uint8_t cardUidLength) {
   /* Usage:
      byte testData[] = { 0x11,0x11,0x11,0x11,0x22,0x33,0x44 };
-     if ( uid_check(testData,7) ) {
+     if ( uid_check(testData,7) >= 0 ) {
        Serial.println("ok");
      } else {
        Serial.println("no");
@@ -351,24 +354,28 @@ bool uid_check(const byte* cardUid, uint8_t cardUidLength) {
 
   if (debug)
   {
-    Serial.print("Checking a uid of length "); Serial.println(cardUidLength);
+    Serial.print("Checking a uid of length "); Serial.println(uidLength);
   }
 
-  int e2idx = 0; //should be 0
+  uint16_t e2idx = 0; //should be 0
   while ( e2idx < E2END ) {
-    //Serial.print("Starting check at e2idx "); Serial.println(e2idx,DEC);
-    int i = 0;
-    while ( i < cardUidLength ) {
-      if ( EEPROM.read(e2idx+i) != cardUid[i] ) {
+    if (debug)
+    {
+      Serial.print("Starting check at e2idx "); Serial.println(e2idx,DEC);
+    }
+
+    uint16_t i = 0;
+    while ( i < uidLength ) {
+      if ( EEPROM.read(e2idx+i) != uid[i] ) {
         //Serial.print(EEPROM.read(e2idx+i),HEX); Serial.print(" Doesn't match "); Serial.println(cardUid[i],HEX);
         break;
       }
       //Serial.print(i,DEC); Serial.print(" "); Serial.println(cardUidLength,DEC);
-      if ( ++i >= cardUidLength ) {
+      if ( ++i >= uidLength ) {
         //we got through the whole check without breaking - it must match
         //Serial.println("It matches!!!");
         Serial.print("Found at e2idx "); Serial.println(e2idx,DEC);
-        return true;
+        return e2idx;
       }
     }//end card while
     //Serial.print("No card found looking at "); Serial.println(e2idx,DEC);
@@ -384,5 +391,5 @@ bool uid_check(const byte* cardUid, uint8_t cardUidLength) {
 
   }//end e2 while
 
-  return false;
+  return -1;
 } // end uid_check()
