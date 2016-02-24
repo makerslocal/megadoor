@@ -376,10 +376,43 @@ void uid_remove(uint8_t uid[], uint8_t uidLength, bool loud /*= false*/)
 
 void uid_add(uint8_t uid[], uint8_t uidLength, bool loud /*= false*/)
 {
-  // do things
+  // Get the EEPROM address of the UID
+  uint16_t addr = uid_check(uid, uidLength);
+  if (addr >= 0) // UID is already in EEPROM
+  {
+    if (loud||debug) Serial.println("UID already exists.");
+    return;
+  }
+  // Create UID in EEPROM
+  uint8_t blank[] = { 0, 0, 0, 0, 0, 0, 0 }; // Oh. Oh man. This is sneaky.
+  // Get the EEPROM address of an empty spot
+  addr = uid_check(blank, uidLength);
+  if (addr >= 0) // Found
+  {
+    uint16_t index;
+    for (index = 0; index < uidLength; ++index)
+    {
+      // Check that there isn't a terminating 0xff in the middle of our UID.
+      if (EEPROM.read(addr+index) == 0xff)
+      {
+        Serial.print("There is a problem. Part of the UID was 0xff. Aborting! EEPROM decimal address: ");
+        Serial.println(addr+index, DEC);
+        return;
+      }
+      if (loud||debug)
+      {
+        Serial.print("Updating ");
+        Serial.print((addr+index), DEC);
+        Serial.print(" to ");
+        Serial.println(uid[index], HEX);
+      }
+      EEPROM.update(addr+index, uid[index]);
+    }
+    EEPROM.update(addr+index, 0xff);
+  }
 }
 
-uint16_t uid_check(uint8_t* uid, uint8_t cardUidLength) {
+uint16_t uid_check(uint8_t* uid, uint8_t uidLength) {
   /* Usage:
      byte testData[] = { 0x11,0x11,0x11,0x11,0x22,0x33,0x44 };
      if ( uid_check(testData,7) >= 0 ) {
