@@ -30,23 +30,34 @@
 #include <Wire.h>
 #include <SPI.h>
 // Included for the firmware
-#include <Adafruit_PN532.h>
 #include <EEPROM.h>
+
+// 4-Wire I2C
+// Uncomment this and comment 2-Wire below to use Adafruit's latest libraries with IRQ.
+//#include <Adafruit_PN532.h>
+
+// 2-Wire I2C
+// Uncomment this and comment 4-Wire above to use Adafruit's old libraries.
+#include <PN532_I2C.h>
+#include <PN532.h>
+#include <NfcAdapter.h>
+PN532_I2C pn532i2c(Wire);
+PN532 nfc(pn532i2c);
 
 //////////
 // PINS //
 //////////
 
 // Required for I2C
-#define PN532_IRQ   (6)
-#define PN532_RESET (5)
+#define PN532_IRQ   (6) // NOT CONNECTED
+#define PN532_RESET (5) // NOT CONNECTED
 // Trips the transistor switch
 #define PIN_DOOR_UNLOCK (9) // Wired to NPN transistor
 // Have Lassy fetch help!
 #define PIN_TROUBLE (13) // Wired to LED
 /* !I2C!
   There's an implied SDA&SCL pin here.
-  The Adafruid_PN532 library uses the ATmega's
+  Both I2C libraries uses the ATmega's
   default I2C pins (27&28 on the DIP) to reach
   the NFC board. Make sure these pins are wired.
   Both of these pins also require a pull-up resistor
@@ -59,14 +70,37 @@
 // GLOBALS //
 /////////////
 
-// Instantiate the NFC library
-Adafruit_PN532 nfc(PN532_IRQ, PN532_RESET);
-// Set debugging
+// Instantiate the 4-Wire I2C NFC library
+//Adafruit_PN532 nfc(PN532_IRQ, PN532_RESET);
+
+bool debug = false; // Set debugging
 //#define DEBUG
+
 // Set version MAJ.MIN-REV
-#define VER_MAJ 0
-#define VER_MIN 1
-#define VER_REV 3
+#define VERSION "0.1-5"
+
+// Serial buffer
+const unsigned short int BUF_LEN = 32;
+char in_char = '\0';
+char in_buffer[BUF_LEN+1];
+unsigned short buffer_index = 0;
+short int input_state = 0; // Current state for reading serial input.
+/* Serial State Machine
+ * 0: Out of state, discard. ':' -> go to 1.
+ * 1: Record command. '\n' -> go to 2.
+ * 2: Process command and go to 0.
+ */
+
+////////////////
+// PROTOTYPES //
+////////////////
+
+void door_unlock();
+void door_lock();
+void uid_remove(uint8_t uid[], uint8_t uidLength, bool loud = false);
+void uid_add(uint8_t uid[], uint8_t uidLength, bool loud = false);
+void buffer_reset();
+void buffer_process(bool loud = false);
 
 /**
  * setup() - a poem
@@ -81,6 +115,7 @@ void setup() {
   #endif
 
   pinMode(PIN_DOOR_UNLOCK, OUTPUT);
+  digitalWrite(13, HIGH);
 
   nfc.begin();
   uint32_t versiondata = nfc.getFirmwareVersion();
@@ -98,6 +133,12 @@ void setup() {
     Serial.print("Firmware ver. "); Serial.print((versiondata>>16) & 0xFF, DEC);
     Serial.print('.'); Serial.println((versiondata>>8) & 0xFF, DEC);
   #endif
+
+  // Set the max number of retry attempts to read from a card
+  // This prevents us from waiting forever for a card, which is
+  // the default behaviour of the PN532.
+  nfc.setPassiveActivationRetries(0xFF); // For 2-Wire I2C only!
+
   // configure board to read RFID tags
   nfc.SAMConfig();
   #ifdef DEBUG
@@ -110,10 +151,77 @@ void loop() {
   uint8_t uid[] = { 0, 0, 0, 0, 0, 0, 0 };  // Buffer to store the returned UID
   uint8_t uidLength;                        // Length of the UID (4 or 7 bytes depending on ISO14443A card type)
 
+  if (Serial.available())
+  	{
+  		in_char = Serial.read();
+  		if (in_char == '.') {
+  			Serial.println("\n\rUsage:");
+  			Serial.println(":loud_cmd or [quiet_cmd]");
+  			Serial.println("[door lock/unlock][dl][du] - [rm UID][-UID] - [add UID][+UID]");
+  		}
+  		switch (input_state) {
+  			case 0: /* State 0: disregard input */
+  				if (in_char == ':') {
+  					buffer_reset();
+  					input_state = 1;
+  				}
+  				if (in_char == '[') {
+  					buffer_reset();
+  					input_state = 2;
+  				}
+  			break;
+  			case 1: /* State 1: load buffer, noisily echo input */
+  				if (in_char == '\n' || in_char == '\r' || buffer_index == BUF_LEN) {
+  					buffer_process(true);
+  					input_state = 0;
+  				} else if (in_char == ':') {
+  					buffer_reset();
+  					input_state = 1;
+  				} else if (in_char == '[') {
+  					buffer_reset();
+  					input_state = 2;
+  				} else if (in_char == 0) {
+  					Serial.println(". Input Cancelled.");
+  					buffer_reset();
+  					input_state = 0;
+  				} else {
+  					Serial.print(in_char);
+  					in_buffer[buffer_index++] = in_char;
+  				}
+  			break;
+  			case 2: /* State 2: load buffer silently */
+  				if (in_char == ']' || buffer_index == BUF_LEN) {
+  					buffer_process();
+  					input_state = 0;
+  				} else if (in_char == ':') {
+  					buffer_reset();
+  					input_state = 1;
+  				} else if (in_char == '[') {
+  					buffer_reset();
+  					input_state = 2;
+  				} else if (in_char == 0) {
+  					buffer_reset();
+  					input_state = 0;
+  				} else {
+  					in_buffer[buffer_index++] = in_char;
+  				}
+  			break;
+  			default:
+  				Serial.println(" Error, switch encountered default case.");
+  				input_state=0;
+  			break;
+  		} // end switch
+  		if (buffer_index == 0 && input_state == 1) {
+  			Serial.print("\n\r> ");
+  		}
+  		in_char = '\0';
+  	} // End if Serial.available()
+
   // Wait for an ISO14443A type cards (Mifare, etc.).  When one is found
   // 'uid' will be populated with the UID, and uidLength will indicate
   // if the uid is 4 bytes (Mifare Classic) or 7 bytes (Mifare Ultralight)
-  success = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength);
+  success = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength, 1000);
+  Serial.println("nfc read timeout/success");
 
   if (success)
   {
@@ -129,14 +237,12 @@ void loop() {
     #endif
 
     // Reference UID against known valid
-    if ( checkCard(uid,uidLength) )
+    if ( uid_check(uid,uidLength) )
     {
       #ifdef DEBUG
         Serial.print("UID length "); Serial.print(uidLength); Serial.println(" accepted.");
       #endif
-      digitalWrite(PIN_DOOR_UNLOCK, HIGH);
-      delay(1000);
-      digitalWrite(PIN_DOOR_UNLOCK, LOW);
+      door_unlock();
     }
     else
     {
@@ -150,21 +256,95 @@ void loop() {
   }
 }
 
+void door_unlock ()
+{
+  digitalWrite(PIN_DOOR_UNLOCK, HIGH);
+  delay(250);
+  digitalWrite(PIN_DOOR_UNLOCK, LOW);
+  delay(3000);
+}
 
-/*
-  checkCard()
+void door_lock ()
+{
+  // Ha-HA!
+}
 
-  Usage:
-   byte testData[] = { 0x11,0x11,0x11,0x11,0x22,0x33,0x44 };
-   if ( checkCard(testData,7) ) {
-     Serial.println("ok");
-   } else {
-     Serial.println("no");
-   }
- */
-boolean checkCard(const byte* cardUid, uint8_t cardUidLength) {
+void buffer_reset ()
+{
+	for (buffer_index = 0; buffer_index < BUF_LEN; ++buffer_index)
+	{
+		in_buffer[buffer_index] = '\0';
+	}
+	buffer_index = 0;
+}
 
-  //Serial.print("Checking a uid of length "); Serial.println(cardUidLength);
+void buffer_process(bool loud /*= false*/)
+{
+	if (loud) {
+		Serial.print("\n\rProcessing: ");
+		Serial.println(in_buffer);
+	}
+	if (in_buffer[0] == 'd') // Door
+	{
+    if (loud) Serial.print("Setting door: ");
+		if (in_buffer[1] == 'u') // Door Unlock
+		{
+			if (loud) Serial.println("UNLOCKED.");
+      door_unlock();
+		} // end Door Unlock
+		else if (in_buffer[1] == 'l') // Door Lock
+		{
+			if (loud) Serial.println("LOCKED.");
+      door_lock();
+		} // end Door Lock
+	} // end Door
+  else if (in_buffer[0] == 'u') // UID
+  {
+    if (loud) Serial.print("UID: ");
+    if (buffer_index != 16 && buffer_index != 10)
+    {
+      #ifdef DEBUG
+        Serial.print(buffer_index);
+      #endif
+      Serial.println("Incorrect command length.");
+      buffer_reset();
+      return;
+    }
+    if (in_buffer[1] == '-') // UID Remove
+    {
+      if (loud) Serial.print(" Remove ");
+    } // end UID Remove
+    else if (in_buffer[1] == '+') // UID Add
+    {
+      if (loud) Serial.print(" Add ");
+    } // end UID Add
+  }
+	buffer_reset();
+} // end buffer_process()
+
+void uid_remove(uint8_t uid[], uint8_t uidLength, bool loud /*= false*/)
+{
+  // do things
+}
+
+void uid_add(uint8_t uid[], uint8_t uidLength, bool loud /*= false*/)
+{
+  // do things
+}
+
+bool uid_check(const byte* cardUid, uint8_t cardUidLength) {
+  /* Usage:
+     byte testData[] = { 0x11,0x11,0x11,0x11,0x22,0x33,0x44 };
+     if ( uid_check(testData,7) ) {
+       Serial.println("ok");
+     } else {
+       Serial.println("no");
+     }
+  */
+
+  #ifdef DEBUG
+    Serial.print("Checking a uid of length "); Serial.println(cardUidLength);
+  #endif
 
   int e2idx = 0; //should be 0
   while ( e2idx < E2END ) {
@@ -197,5 +377,4 @@ boolean checkCard(const byte* cardUid, uint8_t cardUidLength) {
   }//end e2 while
 
   return false;
-
-}
+} // end uid_check()
