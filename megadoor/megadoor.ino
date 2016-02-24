@@ -331,9 +331,46 @@ void buffer_process(bool loud /*= false*/)
 
 void uid_remove(uint8_t uid[], uint8_t uidLength, bool loud /*= false*/)
 {
-  if (uid_check(uid, uidLength))
+  // Get the EEPROM address of the UID
+  uint16_t addr = uid_check(uid, uidLength);
+  if (addr < 0) // UID doesn't exist in EEPROM
   {
-    if (loud) Serial.println("UID exists, removing.")
+    if (loud||debug) Serial.println("UID already vacant.");
+    return;
+  }
+  // Purge the UID
+  uint16_t index;
+  // Check that a trailing 0xff exists.
+  // Otherwise we may delete the wrong size UID.
+  if (EEPROM.read(addr+uidLength) != 0xff)
+  {
+    Serial.print("There is a problem. The terminating 0xff is absent. Aborting! EEPROM decimal address: ");
+    Serial.println(addr+uidLength, DEC);
+    return;
+  }
+  for (index = 0; index < uidLength; ++index)
+  {
+    // Check that there isn't a terminating 0xff in the middle of our UID.
+    if (EEPROM.read(addr+index) == 0xff)
+    {
+      Serial.print("There is a problem. Part of the UID was 0xff. Aborting! EEPROM decimal address: ");
+      Serial.println(addr+index, DEC);
+      return;
+    }
+    // Check again that the byte we're erasing matches the UID.
+    if (EEPROM.read(addr+index) != uid[index])
+    {
+      Serial.print("There is a problem. The UID doesn't match what we're erasing. Aborting! EEPROM decimal address: ");
+      Serial.println(addr+index, DEC);
+      return;
+    }
+    if (loud||debug)
+    {
+      Serial.print("Updating ");
+      Serial.print((addr+index), DEC);
+      Serial.println(" to 0x00");
+    }
+    EEPROM.update(addr+index, 0x00);
   }
 }
 
@@ -374,6 +411,10 @@ uint16_t uid_check(uint8_t* uid, uint8_t cardUidLength) {
       if ( ++i >= uidLength ) {
         //we got through the whole check without breaking - it must match
         //Serial.println("It matches!!!");
+        // if (EEPROM.read(e2idx+i) != 0xff) // The terminator is missing
+        // {
+        //
+        // }
         Serial.print("Found at e2idx "); Serial.println(e2idx,DEC);
         return e2idx;
       }
