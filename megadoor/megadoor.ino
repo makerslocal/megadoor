@@ -115,7 +115,8 @@ void setup() {
   }
 
   pinMode(PIN_DOOR_UNLOCK, OUTPUT);
-  digitalWrite(13, HIGH);
+  pinMode(PIN_TROUBLE, OUTPUT);
+  digitalWrite(PIN_TROUBLE, LOW);
 
   nfc.begin();
   uint32_t versiondata = nfc.getFirmwareVersion();
@@ -221,7 +222,7 @@ void loop() {
   // 'uid' will be populated with the UID, and uidLength will indicate
   // if the uid is 4 bytes (Mifare Classic) or 7 bytes (Mifare Ultralight)
   success = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength, 1000);
-  Serial.println("nfc read timeout/success");
+  if (debug) Serial.println("nfc read timeout/success.");
 
   if (success)
   {
