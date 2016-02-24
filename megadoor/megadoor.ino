@@ -437,10 +437,14 @@ uint16_t uid_check(uint8_t* uid, uint8_t uidLength) {
     uint16_t i = 0;
     while ( i < uidLength ) {
       if ( EEPROM.read(e2idx+i) != uid[i] ) {
-        //Serial.print(EEPROM.read(e2idx+i),HEX); Serial.print(" Doesn't match "); Serial.println(cardUid[i],HEX);
+        if (debug) {
+          Serial.print(EEPROM.read(e2idx+i),HEX); Serial.print(" Doesn't match "); Serial.println(uid[i],HEX);
+        }
         break;
       }
-      //Serial.print(i,DEC); Serial.print(" "); Serial.println(cardUidLength,DEC);
+      if (debug) {
+        Serial.print(i,DEC); Serial.print(" "); Serial.println(uidLength,DEC);
+      }
       if ( ++i >= uidLength ) {
         //we got through the whole check without breaking - it must match
         //Serial.println("It matches!!!");
@@ -452,16 +456,21 @@ uint16_t uid_check(uint8_t* uid, uint8_t uidLength) {
         return e2idx;
       }
     }//end card while
-    //Serial.print("No card found looking at "); Serial.println(e2idx,DEC);
-    //delay(1000);
 
-    //Serial.println("Finding next idx");
+    if (debug) {
+      Serial.print("No card found looking at "); Serial.println(e2idx,DEC);
+      delay(1000);
+    }
+
+    if (debug) Serial.println("Finding next idx");
     while ( EEPROM.read(e2idx) != 0xff ) {
-      //Serial.print(e2idx,DEC); Serial.print(" ");
+      if (debug) {
+        Serial.print(e2idx,DEC); Serial.print(" ");
+      }
       e2idx++;
     }
     e2idx++; //find the ff and then skip it
-    //Serial.println("!");
+    if (debug) Serial.println("!");
 
   }//end e2 while
 
