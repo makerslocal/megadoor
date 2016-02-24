@@ -74,7 +74,6 @@ PN532 nfc(pn532i2c);
 //Adafruit_PN532 nfc(PN532_IRQ, PN532_RESET);
 
 bool debug = false; // Set debugging
-//#define DEBUG
 
 // Set version MAJ.MIN-REV
 #define VERSION "0.1-5"
@@ -109,10 +108,11 @@ void buffer_process(bool loud = false);
  */
 void setup() {
   Serial.begin(9600);
-  #ifdef DEBUG
-  Serial.print("megadoor version "); Serial.println(VERSION);
-  Serial.print("I have "); Serial.print(E2END); Serial.println(" bytes EEPROM.");
-  #endif
+  if (debug)
+  {
+    Serial.print("megadoor version "); Serial.println(VERSION);
+    Serial.print("I have "); Serial.print(E2END); Serial.println(" bytes EEPROM.");
+  }
 
   pinMode(PIN_DOOR_UNLOCK, OUTPUT);
   digitalWrite(13, HIGH);
@@ -128,11 +128,12 @@ void setup() {
     }
   }
   // Got ok data, print it out!
-  #ifdef DEBUG
+  if (debug)
+  {
     Serial.print("Found chip PN5"); Serial.println((versiondata>>24) & 0xFF, HEX);
     Serial.print("Firmware ver. "); Serial.print((versiondata>>16) & 0xFF, DEC);
     Serial.print('.'); Serial.println((versiondata>>8) & 0xFF, DEC);
-  #endif
+  }
 
   // Set the max number of retry attempts to read from a card
   // This prevents us from waiting forever for a card, which is
@@ -141,9 +142,8 @@ void setup() {
 
   // configure board to read RFID tags
   nfc.SAMConfig();
-  #ifdef DEBUG
-    Serial.println("Waiting for an ISO14443A Card ...");
-  #endif
+
+  if (debug) Serial.println("Waiting for an ISO14443A Card ...");
 }
 
 void loop() {
@@ -226,29 +226,34 @@ void loop() {
   if (success)
   {
     // Display some basic information about the card
-    #ifdef DEBUG
+    if (debug)
+    {
       Serial.println("Found an ISO14443A card");
       Serial.print("  UID Length: ");Serial.print(uidLength, DEC);Serial.println(" bytes");
       Serial.print("  UID Value: ");
       nfc.PrintHex(uid, uidLength);
       Serial.println("");
-    #else
+    }
+    else
+    {
       nfc.PrintHex(uid, uidLength);
-    #endif
+    }
 
     // Reference UID against known valid
     if ( uid_check(uid,uidLength) )
     {
-      #ifdef DEBUG
+      if (debug)
+      {
         Serial.print("UID length "); Serial.print(uidLength); Serial.println(" accepted.");
-      #endif
+      }
       door_unlock();
     }
     else
     {
-      #ifdef DEBUG
+      if (debug)
+      {
         Serial.print("UID length "); Serial.print(uidLength); Serial.println(" rejected.");
-      #endif
+      }
       digitalWrite(PIN_TROUBLE, HIGH);
       delay(1000);
       digitalWrite(PIN_TROUBLE, LOW);
@@ -303,9 +308,10 @@ void buffer_process(bool loud /*= false*/)
     if (loud) Serial.print("UID: ");
     if (buffer_index != 16 && buffer_index != 10)
     {
-      #ifdef DEBUG
+      if (debug)
+      {
         Serial.print(buffer_index);
-      #endif
+      }
       Serial.println("Incorrect command length.");
       buffer_reset();
       return;
@@ -342,9 +348,10 @@ bool uid_check(const byte* cardUid, uint8_t cardUidLength) {
      }
   */
 
-  #ifdef DEBUG
+  if (debug)
+  {
     Serial.print("Checking a uid of length "); Serial.println(cardUidLength);
-  #endif
+  }
 
   int e2idx = 0; //should be 0
   while ( e2idx < E2END ) {
