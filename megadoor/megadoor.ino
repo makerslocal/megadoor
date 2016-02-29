@@ -9,6 +9,7 @@
 /* TODO
   In no particular order:
   - Order the TODO list
+  - Combine serial input and state machine.
   - Implement external EEPROM
   - Organize EEPROM structure.
     I'm thinking a struct with
@@ -79,6 +80,8 @@ bool use_nfc = true; // Use NFC sensor
 // Set version MAJ.MIN-REV
 #define VERSION "0.1-5"
 
+#define BACKSPACE "\b \b"
+
 // Serial buffer
 const unsigned short int BUF_LEN = 32;
 char in_char = '\0';
@@ -99,9 +102,9 @@ void door_unlock();
 void door_lock();
 void uid_remove(uint8_t uid[], uint8_t uidLength, bool loud = false);
 void uid_add(uint8_t uid[], uint8_t uidLength, bool loud = false);
-uint16_t byte_get(uint16_t addr, bool loud = false);
-void byte_set(uint16_t addr, uint8_t byte, bool loud = false);
-void byte_dump();
+int eeprom_byte_print(int addr, bool loud = false);
+void byte_set(int addr, uint8_t byte, bool loud = false);
+void eeprom_dump();
 void buffer_reset();
 void buffer_process(bool loud = false);
 
@@ -163,14 +166,15 @@ void loop() {
 
   if (Serial.available())
   	{
-  		in_char = Serial.read();
+  		in_char = Serial.read(); // Get the next character
+      // Perfunctory stuff
   		if (in_char == '.') {
   			Serial.println("\n\rUsage:");
   			Serial.println(":loud_cmd or [quiet_cmd]");
   			Serial.println("[door lock/unlock][dl][du] - [rm UID][-UID] - [add UID][+UID]");
-  		} else if (in_char == '\n' || in_char == '\r') {
-        Serial.print(in_char);
-      }
+        buffer_reset();
+  		}
+      // Input state machine
   		switch (input_state) {
   			case 0: /* State 0: disregard input */
   				if (in_char == ':') {
@@ -184,6 +188,7 @@ void loop() {
   			break;
   			case 1: /* State 1: load buffer, noisily echo input */
   				if (in_char == '\n' || in_char == '\r' || buffer_index == BUF_LEN) {
+            Serial.print(in_char);
   					buffer_process(true);
   					input_state = 0;
   				} else if (in_char == ':') {
@@ -298,21 +303,6 @@ void buffer_reset ()
 	buffer_index = 0;
 }
 
-uint8_t hex_decode(const char *in, int8_t len, uint16_t *out)
-{
-        unsigned int i, t, hn, ln;
-
-        for (t = 0,i = 0; i < len; i+=2,++t) {
-
-                hn = in[i] > '9' ? in[i] - 'A' + 10 : in[i] - '0';
-                ln = in[i+1] > '9' ? in[i+1] - 'A' + 10 : in[i+1] - '0';
-
-                out[t] = (hn << 4 ) | ln;
-        }
-
-        return *out;
-}
-
 void buffer_process(bool loud /*= false*/)
 {
 	if (loud) {
@@ -361,23 +351,70 @@ void buffer_process(bool loud /*= false*/)
     if (in_buffer[1] == 'd') // EEPROM BYTE DUMP
     {
       if (loud) Serial.println("DUMP");
-      byte_dump();
+      eeprom_dump();
     } else if (in_buffer[1] == 'g') { // EEPROM BYTE GET
       if (loud) Serial.println("GET");
-      uint16_t addr;
-      hex_decode(&in_buffer[3], 3, &addr);
-      byte_get(addr, loud);
+      int addr;
+      Serial.println(in_buffer);
+      addr = strtol(&in_buffer[2], nullptr, 0);
+      Serial.println(addr);
+      eeprom_byte_print(addr, loud);
     } else if (in_buffer[1] == 's') { // EEPROM BYTE SET
       if (loud) Serial.println("SET");
       uint8_t byte;
-      uint16_t addr;
-      hex_decode(&in_buffer[3], 3, &addr);
-      hex_decode(&in_buffer[7], 2, (uint16_t*)&byte);
-      byte_set(addr, byte, loud);
+      int addr;
+      char * endptr;
+      addr = strtol(&in_buffer[2], &endptr, 0);
+      byte = strtol(endptr, nullptr, 0);
+      // hex_decode(&in_buffer[3], 3, &addr);
+      // hex_decode(&in_buffer[7], 2, (int*)&byte);
+      eeprom_byte_print(addr, loud);
+      Serial.println("-->");
+      EEPROM.update(addr, byte);
+      eeprom_byte_print(addr, loud);
     }
   }
 	buffer_reset();
 } // end buffer_process()
+
+int eeprom_byte_print(int addr, bool loud /*= false*/)
+{
+  uint8_t byte = EEPROM.read(addr);
+  if (loud||debug) {
+    Serial.print("Address [0x"); Serial.print(addr, HEX);
+    Serial.print("] Data: [0x"); Serial.print(byte, HEX); Serial.println("]");
+  }
+  return byte;
+}
+
+void byte_set(int addr, uint8_t byte, bool loud /*= false*/)
+{
+  if (loud||debug) {
+    Serial.print("Address [0x"); Serial.print(addr, HEX);
+    Serial.print("] Old data: [0x"); Serial.print(byte, HEX); Serial.println("]");
+  }
+  EEPROM.update(addr, byte);
+  if (loud||debug) {
+    Serial.print("New data: [0x"); Serial.print(EEPROM.read(addr), HEX); Serial.println("]");
+  }
+}
+
+void eeprom_dump()
+{
+  int addr;
+  for (addr = 0; addr < E2END; addr+=8)
+  {
+    uint8_t subaddr;
+    Serial.print("Addr [0x"); Serial.print(addr, HEX);
+    Serial.print("-0x"); Serial.print(addr+7, HEX);
+    Serial.print("]\t");
+    for (subaddr = 0; subaddr < 8; subaddr++)
+    {
+      Serial.print("[0x"); Serial.print(EEPROM.read(addr+subaddr), HEX); Serial.print("] ");
+    }
+    Serial.print("\n\r");
+  }
+}
 
 void uid_remove(uint8_t uid[], uint8_t uidLength, bool loud /*= false*/)
 {
@@ -421,45 +458,6 @@ void uid_remove(uint8_t uid[], uint8_t uidLength, bool loud /*= false*/)
       Serial.println(" to 0x00");
     }
     EEPROM.update(addr+index, 0x00);
-  }
-}
-
-uint16_t byte_get(uint16_t addr, bool loud /*= false*/)
-{
-  uint8_t byte = EEPROM.read(addr);
-  if (loud||debug) {
-    Serial.print("Address [0x"); Serial.print(addr, HEX);
-    Serial.print("] Data: [0x"); Serial.print(byte, HEX); Serial.println("]");
-  }
-  return byte;
-}
-
-void byte_set(uint16_t addr, uint8_t byte, bool loud /*= false*/)
-{
-  if (loud||debug) {
-    Serial.print("Address [0x"); Serial.print(addr, HEX);
-    Serial.print("] Old data: [0x"); Serial.print(byte, HEX); Serial.println("]");
-  }
-  EEPROM.update(addr, byte);
-  if (loud|| debug) {
-    Serial.print("New data: [0x"); Serial.print(EEPROM.read(addr), HEX); Serial.println("]");
-  }
-}
-
-void byte_dump()
-{
-  uint16_t addr;
-  for (addr = 0; addr < E2END; addr+=8)
-  {
-    uint16_t subaddr;
-    Serial.print("Addr [0x"); Serial.print(addr, HEX);
-    Serial.print("-0x"); Serial.print(addr+7, HEX);
-    Serial.print("]\t");
-    for (subaddr = 0; subaddr < 8; subaddr++)
-    {
-      Serial.print("[0x"); Serial.print(EEPROM.read(addr+subaddr), HEX); Serial.print("] ");
-    }
-    Serial.print("\n\r");
   }
 }
 
