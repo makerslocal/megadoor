@@ -237,10 +237,10 @@ void loop() {
   // Wait for an ISO14443A type cards (Mifare, etc.).  When one is found
   // 'uid' will be populated with the UID, and uidLength will indicate
   // if the uid is 4 bytes (Mifare Classic) or 7 bytes (Mifare Ultralight)
-  if (use_nfc)
+  if (use_nfc && !input_state)
   {
-    success = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength, 1000);
-    if (debug) Serial.println("nfc read timeout/success.");
+    success = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength, 100);
+    //if (debug) Serial.println("nfc read timeout/success.");
 
     if (success)
     {
@@ -306,8 +306,9 @@ void buffer_reset ()
 void buffer_process(bool loud /*= false*/)
 {
 	if (loud) {
-		Serial.print("\n\rProcessing: ");
-		Serial.println(in_buffer);
+		Serial.print("\n\rProcessing: [");
+		Serial.print(in_buffer);
+    Serial.println("]");
 	}
 	if (in_buffer[0] == 'd') // Door
 	{
@@ -326,7 +327,7 @@ void buffer_process(bool loud /*= false*/)
   else if (in_buffer[0] == 'u') // UID
   {
     if (loud) Serial.print("UID: ");
-    if (buffer_index != 16 && buffer_index != 10)
+    if (buffer_index != 17 && buffer_index != 11)
     {
       if (debug)
       {
@@ -336,13 +337,55 @@ void buffer_process(bool loud /*= false*/)
       buffer_reset();
       return;
     }
-    if (in_buffer[1] == '-') // UID Remove
+    if (in_buffer[1] == 'r') // UID Remove
     {
-      if (loud) Serial.print(" Remove ");
+      if (loud) Serial.print(" REMOVE ");
+      uint8_t uid[7];
+      int addr;
+      char * endptr;
+      addr = strtol(&in_buffer[2], &endptr, 16);
+      uint8_t len = 0;
+      while (in_buffer[3+len] != '\0') // count uid length
+      {
+        len++;
+      }
+      len--;
+      Serial.println(len);
+      uint8_t idx;
+      for (idx = 0; idx < len; idx+=2)
+      {
+        char slice[3];
+        slice[0] = in_buffer[3+idx];
+        slice[1] = in_buffer[3+idx+1];
+        slice[2] = '\0';
+        uid[idx/2] = strtol(slice, nullptr, 16);
+      }
+      uid_remove(uid, len>10?7:4, loud);
     } // end UID Remove
-    else if (in_buffer[1] == '+') // UID Add
+    else if (in_buffer[1] == 'a') // UID Add
     {
-      if (loud) Serial.print(" Add ");
+      if (loud) Serial.print(" ADD ");
+      uint8_t uid[7];
+      int addr;
+      char * endptr;
+      addr = strtol(&in_buffer[2], &endptr, 16);
+      uint8_t len = 0;
+      while (in_buffer[3+len] != '\0') // count uid length
+      {
+        len++;
+      }
+      len--;
+      Serial.println(len);
+      uint8_t idx;
+      for (idx = 0; idx < len; idx+=2)
+      {
+        char slice[3];
+        slice[0] = in_buffer[3+idx];
+        slice[1] = in_buffer[3+idx+1];
+        slice[2] = '\0';
+        uid[idx/2] = strtol(slice, nullptr, 16);
+      }
+      uid_add(uid, len>10?7:4, loud);
     } // end UID Add
   }
   else if (in_buffer[0] == 'b') // EEPROM BYTE
@@ -418,15 +461,26 @@ void eeprom_dump()
 
 void uid_remove(uint8_t uid[], uint8_t uidLength, bool loud /*= false*/)
 {
+  if (debug) {
+    Serial.print("UID length: ");
+    Serial.println(uidLength);
+    Serial.print("UID to remove: ");
+    nfc.PrintHex(uid, uidLength);
+  }
   // Get the EEPROM address of the UID
-  uint16_t addr = uid_check(uid, uidLength);
+  int addr = uid_check(uid, uidLength);
   if (addr < 0) // UID doesn't exist in EEPROM
   {
     if (loud||debug) Serial.println("UID already vacant.");
     return;
+  } else {
+    if (debug) {
+      Serial.print("Found UID in eeprom. Address: ");
+      Serial.println(addr);
+    }
   }
   // Purge the UID
-  uint16_t index;
+  uint8_t index;
   // Check that a trailing 0xff exists.
   // Otherwise we may delete the wrong size UID.
   if (EEPROM.read(addr+uidLength) != 0xff)
@@ -464,7 +518,11 @@ void uid_remove(uint8_t uid[], uint8_t uidLength, bool loud /*= false*/)
 void uid_add(uint8_t uid[], uint8_t uidLength, bool loud /*= false*/)
 {
   // Get the EEPROM address of the UID
-  uint16_t addr = uid_check(uid, uidLength);
+  int addr = uid_check(uid, uidLength);
+  if (debug) {
+    Serial.print("check address: ");
+    Serial.println(addr, HEX);
+  }
   if (addr >= 0) // UID is already in EEPROM
   {
     if (loud||debug) Serial.println("UID already exists.");
@@ -476,20 +534,20 @@ void uid_add(uint8_t uid[], uint8_t uidLength, bool loud /*= false*/)
   addr = uid_check(blank, uidLength);
   if (addr >= 0) // Found
   {
-    uint16_t index;
+    int index;
     for (index = 0; index < uidLength; ++index)
     {
       // Check that there isn't a terminating 0xff in the middle of our UID.
       if (EEPROM.read(addr+index) == 0xff)
       {
         Serial.print("There is a problem. Part of the UID was 0xff. Aborting! EEPROM decimal address: ");
-        Serial.println(addr+index, DEC);
+        Serial.println(addr+index, HEX);
         return;
       }
       if (loud||debug)
       {
         Serial.print("Updating ");
-        Serial.print((addr+index), DEC);
+        Serial.print((addr+index), HEX);
         Serial.print(" to ");
         Serial.println(uid[index], HEX);
       }
@@ -497,9 +555,34 @@ void uid_add(uint8_t uid[], uint8_t uidLength, bool loud /*= false*/)
     }
     EEPROM.update(addr+index, 0xff);
   }
+  else // No empty spots
+  {
+    // Iterate until two adjacent bytes are 0xff
+    for (addr = 1; addr <= E2END; ++addr)
+    {
+      if (EEPROM.read(addr) == 0xff && EEPROM.read(addr-1) == 0xff) // Match
+      {
+        int index;
+        for (index = 0; index < uidLength; ++index)
+        {
+          if (loud||debug)
+          {
+            Serial.print("Updating ");
+            Serial.print((addr+index), HEX);
+            Serial.print(" to ");
+            Serial.println(uid[index], HEX);
+          }
+          EEPROM.update(addr+index, uid[index]);
+        }
+        EEPROM.update(addr+index, 0xff);
+        return;
+      }
+    }
+    Serial.println(":c no dice.");
+  }
 }
 
-uint16_t uid_check(uint8_t* uid, uint8_t uidLength) {
+int uid_check(uint8_t* uid, uint8_t uidLength) {
   /* Usage:
      byte testData[] = { 0x11,0x11,0x11,0x11,0x22,0x33,0x44 };
      if ( uid_check(testData,7) >= 0 ) {
@@ -509,28 +592,29 @@ uint16_t uid_check(uint8_t* uid, uint8_t uidLength) {
      }
   */
 
-  if (debug) {
+  /*if (debug) {
     Serial.print("Checking a uid of length "); Serial.println(uidLength);
-  }
+  }*/
 
-  uint16_t e2idx = 0; //should be 0
-  while ( e2idx < E2END ) {
-    if (debug) {
+  int e2idx = 0; //should be 0
+  while ( e2idx <= E2END ) {
+    /*if (debug) {
       Serial.print("Starting check at e2idx "); Serial.println(e2idx,DEC);
-    }
+    }*/
 
-    uint16_t i = 0;
+    uint8_t i = 0;
     while ( i < uidLength ) {
       if ( EEPROM.read(e2idx+i) != uid[i] ) {
-        if (debug) {
+        /*if (debug) {
           Serial.print(EEPROM.read(e2idx+i),HEX); Serial.print(" Doesn't match "); Serial.println(uid[i],HEX);
-        }
+        }*/
         break;
       }
-      if (debug) {
+      /*if (debug) {
         Serial.print(i,DEC); Serial.print(" "); Serial.println(uidLength,DEC);
-      }
-      if ( ++i >= uidLength ) {
+      }*/
+      i++;
+      if ( i >= uidLength && EEPROM.read(e2idx+i) == 0xff) {
         //we got through the whole check without breaking - it must match
         //Serial.println("It matches!!!");
         // if (EEPROM.read(e2idx+i) != 0xff) // The terminator is missing
@@ -542,22 +626,22 @@ uint16_t uid_check(uint8_t* uid, uint8_t uidLength) {
       }
     }//end card while
 
-    if (debug) {
+    /*if (debug) {
       Serial.print("No card found looking at "); Serial.println(e2idx,DEC);
-      delay(1000);
-    }
+      //delay(1000);
+    }*/
 
-    if (debug) Serial.println("Finding next idx");
+    //if (debug) Serial.println("Finding next idx");
     while ( EEPROM.read(e2idx) != 0xff ) {
-      if (debug) {
+      /*if (debug) {
         Serial.print(e2idx,DEC); Serial.print(" ");
-      }
+      }*/
       e2idx++;
     }
     e2idx++; //find the ff and then skip it
-    if (debug) Serial.println("!");
+    //if (debug) Serial.println("!");
 
   }//end e2 while
 
-  return -1;
+  return(-1);
 } // end uid_check()
