@@ -1,3 +1,6 @@
+# Sensitive project files
+keys.h
+
 # PlatformIO items
 .pioenvs
 .clang_complete
