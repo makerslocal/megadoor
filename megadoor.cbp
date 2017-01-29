@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<CodeBlocks_project_file>
+	<FileVersion major="1" minor="6" />
+	<Project>
+		<Option title="megadoor" />
+		<Option execution_dir="/home/berocs/git/megadoor/megadoor" />
+		<Option pch_mode="2" />
+		<Option compiler="avr-gcc" />
+		<Build>
+			<Target title="Debug">
+				<Option output="bin/Debug/megadoor.elf" prefix_auto="1" extension_auto="0" />
+				<Option working_dir="" />
+				<Option object_output="obj/Debug/" />
+				<Option type="5" />
+				<Option compiler="avr-gcc" />
+				<Compiler>
+					<Add option="-Os" />
+					<Add option="-Wextra" />
+					<Add option="-Wall" />
+					<Add option="-std=gnu11" />
+					<Add option="-std=gnu++11" />
+					<Add option="-fdata-sections" />
+					<Add option="-ffunction-sections" />
+					<Add directory="lib/avr-sha1" />
+					<Add directory="lib/avr-printf" />
+					<Add directory="lib/avr-usart" />
+					<Add directory="lib/avr-pn532" />
+					<Add directory="lib/avr-i2c" />
+					<Add directory="lib/avr-keys" />
+				</Compiler>
+				<Linker>
+					<Add option="-Wl,--gc-sections" />
+				</Linker>
+				<MakeCommands>
+					<Build command="$make -f $makefile" />
+					<CompileFile command="$make -f $makefile $file" />
+					<Clean command="$make -f $makefile clean" />
+					<DistClean command="$make -f $makefile distclean$target" />
+					<AskRebuildNeeded command="$make -q -f $makefile $target" />
+					<SilentBuild command="$make -f $makefile &gt; $(CMD_NULL)" />
+				</MakeCommands>
+			</Target>
+			<Target title="Release">
+				<Option output="bin/Release/megadoor.elf" prefix_auto="1" extension_auto="0" />
+				<Option working_dir="" />
+				<Option object_output="obj/Release/" />
+				<Option type="5" />
+				<Option compiler="avr-gcc" />
+				<Compiler>
+					<Add option="-Os" />
+				</Compiler>
+			</Target>
+			<Environment>
+				<Variable name="MCU" value="atmega328p" />
+			</Environment>
+		</Build>
+		<Compiler>
+			<Add option="-Wall" />
+			<Add option="-mmcu=atmega328p" />
+			<Add option="-DF_CPU=16000000UL" />
+		</Compiler>
+		<Linker>
+			<Add option="-mmcu=atmega328p" />
+			<Add option="-Wl,-Map=$(TARGET_OUTPUT_DIR)$(TARGET_OUTPUT_BASENAME).map,--cref" />
+		</Linker>
+		<ExtraCommands>
+			<Add after="avr-size -C --mcu=atmega328p $(TARGET_OUTPUT_FILE)" />
+			<Add after="avr-objdump -h -S $(TARGET_OUTPUT_FILE) &gt; $(TARGET_OUTPUT_DIR)$(TARGET_OUTPUT_BASENAME).lss" />
+			<Add after="avr-objcopy -R .eeprom -R .fuse -R .lock -R .signature -O ihex $(TARGET_OUTPUT_FILE) $(TARGET_OUTPUT_DIR)$(TARGET_OUTPUT_BASENAME).hex" />
+			<Add after="avr-objcopy --no-change-warnings -j .eeprom --change-section-lma .eeprom=0 -O ihex $(TARGET_OUTPUT_FILE) $(TARGET_OUTPUT_DIR)$(TARGET_OUTPUT_BASENAME).eep" />
+			<Add after="avr-objcopy --no-change-warnings -j .lock --change-section-lma .lock=0 -O ihex $(TARGET_OUTPUT_FILE) $(TARGET_OUTPUT_DIR)$(TARGET_OUTPUT_BASENAME).lock" />
+			<Add after="avr-objcopy --no-change-warnings -j .signature --change-section-lma .signature=0 -O ihex $(TARGET_OUTPUT_FILE) $(TARGET_OUTPUT_DIR)$(TARGET_OUTPUT_BASENAME).sig" />
+			<Add after="avr-objcopy --no-change-warnings -j .fuse --change-section-lma .fuse=0 -O ihex $(TARGET_OUTPUT_FILE) $(TARGET_OUTPUT_DIR)$(TARGET_OUTPUT_BASENAME).fuse" />
+			<Add after="srec_cat $(TARGET_OUTPUT_DIR)$(TARGET_OUTPUT_BASENAME).fuse -Intel -crop 0x00 0x01 -offset  0x00 -O $(TARGET_OUTPUT_DIR)$(TARGET_OUTPUT_BASENAME).lfs -Intel" />
+			<Add after="srec_cat $(TARGET_OUTPUT_DIR)$(TARGET_OUTPUT_BASENAME).fuse -Intel -crop 0x01 0x02 -offset -0x01 -O $(TARGET_OUTPUT_DIR)$(TARGET_OUTPUT_BASENAME).hfs -Intel" />
+			<Add after="srec_cat $(TARGET_OUTPUT_DIR)$(TARGET_OUTPUT_BASENAME).fuse -Intel -crop 0x02 0x03 -offset -0x02 -O $(TARGET_OUTPUT_DIR)$(TARGET_OUTPUT_BASENAME).efs -Intel" />
+		</ExtraCommands>
+		<Unit filename="lib/avr-i2c/avr-i2c.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/avr-i2c/avr-i2c.h" />
+		<Unit filename="lib/avr-keys/avr-keys-settings.h" />
+		<Unit filename="lib/avr-keys/avr-keys.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/avr-keys/avr-keys.h" />
+		<Unit filename="lib/avr-keys/eeprom.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/avr-keys/eeprom.h" />
+		<Unit filename="lib/avr-keys/flash.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/avr-keys/flash.h" />
+		<Unit filename="lib/avr-pn532/avr-pn532.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/avr-pn532/avr-pn532.h" />
+		<Unit filename="lib/avr-pn532/pn532_commands.h" />
+		<Unit filename="lib/avr-pn532/pn532_emulation.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/avr-printf/avr-printf.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/avr-printf/avr-printf.h" />
+		<Unit filename="lib/avr-sha1/avr-sha1.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/avr-sha1/avr-sha1.h" />
+		<Unit filename="lib/avr-usart/avr-usart.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="lib/avr-usart/avr-usart.h" />
+		<Unit filename="src/fuse.cpp" />
+		<Unit filename="src/main.cpp" />
+		<Unit filename="src/main.h" />
+		<Extensions>
+			<envvars />
+			<code_completion />
+			<lib_finder disable_auto="1" />
+			<debugger />
+		</Extensions>
+	</Project>
+</CodeBlocks_project_file>

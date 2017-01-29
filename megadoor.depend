@@ -1,0 +1,23 @@
+# depslib dependency file v1.0
+1479684482 source:/home/berocs/git/megadoor/lib/avr-keys/avr-keys.c
+	"avr-keys.h"
+
+1479707247 /home/berocs/git/megadoor/lib/avr-keys/avr-keys.h
+	<avr/pgmspace.h>
+	<stdint.h>
+	"eeprom.h"
+	"flash.h"
+
+1479610621 /home/berocs/git/megadoor/lib/avr-keys/eeprom.h
+	<avr/eeprom.h>
+	"avr-printf.h"
+
+1479509385 /home/berocs/git/megadoor/lib/avr-printf/avr-printf.h
+	<stdarg.h>
+	<avr/pgmspace.h>
+
+1479610621 /home/berocs/git/megadoor/lib/avr-keys/flash.h
+	<avr/power.h>
+	<stdlib.h>
+	"avr-printf.h"
+

@@ -1,0 +1,18 @@
+[submodule "lib/avr-sha1"]
+	path = lib/avr-sha1
+	url = https://github.com/ctag/avr-sha1.git
+[submodule "lib/avr-keys"]
+	path = lib/avr-keys
+	url = https://github.com/aceopensource/avr-keys.git
+[submodule "lib/avr-printf"]
+	path = lib/avr-printf
+	url = https://github.com/aceopensource/avr-printf.git
+[submodule "lib/avr-pn532"]
+	path = lib/avr-pn532
+	url = https://github.com/aceopensource/avr-pn532.git
+[submodule "lib/avr-i2c"]
+	path = lib/avr-i2c
+	url = https://github.com/aceopensource/avr-i2c.git
+[submodule "lib/avr-usart"]
+	path = lib/avr-usart
+	url = https://github.com/aceopensource/avr-usart.git
