@@ -23,4 +23,9 @@
 
 #include "avr-keys.h"
 
+// Application specific settings / macros
+#define NFC_POLLING_NUM 100 // Number of polling periods before returning.
+#define NFC_POLLING_LEN 1 // Polling period, in units of 150ms.
+#define NFC_POLLING_TIMEOUT (NFC_POLLING_NUM*NFC_POLLING_LEN*150) // In milliseconds.
+
 #endif // MAIN_H

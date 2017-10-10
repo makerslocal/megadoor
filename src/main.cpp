@@ -63,7 +63,8 @@ short int input_state = 0; // Current state for reading serial input.
  */
 
 // Stats
-uint32_t cycle_count = 0; // Number of (15s) polling cycles
+// uint32_t max: 65535
+unsigned long int cycle_count = 0; // Number of (15s) polling cycles
 uint32_t valid_count = 0; // Number of verified UIDs processed
 uint32_t invalid_count = 0; // Number of incorrect UIDs processed
 
@@ -196,11 +197,11 @@ uint8_t cb_powerDown(uint8_t * response, uint8_t len)
 
 uint8_t cb_inAutoPoll(uint8_t * response, uint8_t len)
 {
-    if (len != 17)
+    if (len != 17 && len != 14)
     {
 //		led_set(10, 10, 0);
         nbTg = 0;
-//		printf("Len %d is not 17, no card available.\n", len);
+		printf("Len %d is not 17 or 14, no card available.\n", len);
 //		_delay_ms(2);
 //		led_set(0, 0, 0);
         return(0); // Not really an error.
@@ -236,9 +237,10 @@ uint8_t cb_inAutoPoll(uint8_t * response, uint8_t len)
 
     SHA1Result(&sha, text);
 
+    printf("sha1: ");
     for (uint8_t index = 0; index < 20; index++)
     {
-        printf("0x%02x ", text[index]);
+        printf("%02x", text[index]);
     }
 	printf("\n");
 
@@ -307,7 +309,7 @@ uint8_t proc_pn532()
 		state = MAIN_STATE_INIT;
 	}
 
-    if((retval = pn532_inAutoPoll(100, 1, 0x10, cb_inAutoPoll)))
+    if((retval = pn532_inAutoPoll(NFC_POLLING_NUM, NFC_POLLING_LEN, 0x10, cb_inAutoPoll)))
     {
         printf("pn532_inAutoPoll failed 0x%02X.\n", retval);
         pn532_recover();
@@ -354,9 +356,9 @@ void door_unlock ()
 {
     wdt_reset();
 
-	PORTB |= (1 << PB1);
+	PORTB &= ~(2 << PB1);
 	_delay_ms(250);
-	PORTB &= ~(1 << PB1);
+	PORTB |= (2 << PB1);
 
     for (uint8_t i = 0; i < 6; i++)
     {
@@ -426,7 +428,10 @@ void buffer_process(bool loud /*= false*/)
 		{
 			if (loud)
 			{
-				printf("I have survived %u cycles. Approximately %u days.\n", cycle_count, ((cycle_count*1.5)/8640)); // This arithmetic needs review, the serial output is wrong.
+				uint16_t nfc_timeout = (NFC_POLLING_TIMEOUT/1000); // In seconds.
+				printf("Nfc timeout: %d\n", nfc_timeout);
+//				uint16_t uptime =
+				printf("I have survived %u cycles. Approximately %u days.\n", cycle_count, ((cycle_count*1.5)/8640));
 				printf("I have verified %u valid NFC tags, and rejected %u invalid NFC tags.", valid_count, invalid_count);
 			}
 			else printf("%u\n", cycle_count);
@@ -493,26 +498,42 @@ void buffer_process(bool loud /*= false*/)
 		} // End key add
 		else if (in_buffer[1] == 'd') // Key delete
 		{
-			uint8_t key_index = atoi(&in_buffer[2]);
-			if (loud) printf("Key index: %d\n", key_index);
-			uint8_t tmp_key[KEY_MAX_LEN];
-			key_get(key_index, tmp_key);
-			if (loud)
+			if (loud) printf("delete ");
+			if (in_buffer[2] == 'a') // all
 			{
-				printf("Deleting key: ");
-				for (uint8_t index = 0; index < KEY_MAX_LEN; index++)
+				if (loud) printf("all\n");
+				for (int i = 0; i < key_max_index(); i++)
 				{
-					printf("0x%02X ", tmp_key[index]);
+//					printf("removing key %d ", i);
+					key_remove(i);
+//					printf("done.\n");
 				}
-				printf("\n");
-			}
-			if (key_remove(key_index))
-			{
-				printf("Key remove failed.\n");
+				if (loud) printf("Keys removed.\n");
 			}
 			else
 			{
-				if (loud) printf("Key remove success.\n");
+				if (loud) printf("\n");
+				uint8_t key_index = atoi(&in_buffer[2]);
+				if (loud) printf("Key index: %d\n", key_index);
+				uint8_t tmp_key[KEY_MAX_LEN];
+				key_get(key_index, tmp_key);
+				if (loud)
+				{
+					printf("Deleting key: ");
+					for (uint8_t index = 0; index < KEY_MAX_LEN; index++)
+					{
+						printf("0x%02X ", tmp_key[index]);
+					}
+					printf("\n");
+				}
+				if (key_remove(key_index))
+				{
+					printf("Key remove failed.\n");
+				}
+				else
+				{
+					if (loud) printf("Key remove success.\n");
+				}
 			}
 		} // End key delete
 		else if (in_buffer[1] == 'c') // Key check
@@ -532,8 +553,10 @@ void buffer_process(bool loud /*= false*/)
 void init ()
 {
 	// Pin setup
-	DDRB = (1 << PB1); // Set as output
-	DDRD = (1 << PD6); // Set as output
+	DDRB = (2 << PB1); // Set as output
+	DDRD = (2 << PD6); // Set as output
+
+	PORTB |= (2 << PB1);
 }
 
 /**
@@ -543,7 +566,6 @@ void init ()
  */
 void setup()
 {
-
 //	watchdogSetup();
 
     // Printf setup
@@ -555,7 +577,7 @@ void setup()
     printf("Flash key storage: \t%u keys.\n", FLASH_NUM_KEYS);
     printf("EEPROM key storage: \t%d keys.\n", EEPROM_NUM_KEYS);
     printf("Key maximum length: \t%d bytes.\n", KEY_MAX_LEN);
-    printf("Key maximum index: \t%u bytes.\n", key_max_index());
+    printf("Key maximum index: \t%u.\n", key_max_index());
     printf("EEPROM start: \t0x%02X\n", EEPROM_ADDR_START);
     printf("EEPROM end: \t0x%02X\n", EEPROM_ADDR_END);
     printf("Flash start: \t0x%02X\n", FLASH_ADDR_START);
@@ -578,6 +600,8 @@ void setup()
         printf("megadoor version %s\n", VERSION);
         printf("I have %d bytes EEPROM.\n", E2END);
     }
+
+//    eeprom_format();
 
 	state = MAIN_STATE_INIT;
 
@@ -632,6 +656,7 @@ void loop()
             {
                 buffer_reset();
                 input_state = 1;
+                printf("Command: ");
             }
             if (in_char == '[')
             {
