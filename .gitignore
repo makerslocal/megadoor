@@ -1,6 +1,7 @@
 # IDE stuff
 bin/
 obj/
+*.layout
 
 # Sensitive project files
 keys.h
