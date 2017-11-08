@@ -136,7 +136,14 @@ void setup()
 		httpd.send(200, "text/html", ""); //"get ") + index + ", result:");
 		Serial.flush();
 		String cmd = String("[gk") + index + "]";
+
 		Serial.print(cmd);
+		if ( ! Serial.available() ) {
+			httpd.sendContent("\n\n\n\n\n\n\n\n\n\n\n\n\n");
+			Serial.flush();
+			Serial.print(cmd);
+		}
+
 		String result;
 		while ( Serial.available() > 0 ) {
 			String temp = Serial.readStringUntil('\n');
@@ -154,8 +161,6 @@ void setup()
 			}
 			result.toLowerCase();
 			httpd.sendContent(result);
-		} else {
-			httpd.sendContent(String("") + result.length());
 		}
 		httpd.client().stop();
 	});
