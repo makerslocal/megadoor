@@ -147,7 +147,7 @@ void setup()
 				result = String(" ") + temp;
 			}
 		}
-		if ( result.length() == 101 ) {
+		if ( result.length() == 102 ) {
 			//string surgery
 			while ( result.indexOf(" 0x") != -1 ) {
 				result.remove(result.indexOf(" 0x"), 3);
