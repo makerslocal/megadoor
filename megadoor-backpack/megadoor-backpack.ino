@@ -175,6 +175,11 @@ void setup()
 			Serial.flush();
 			String cmd = String("[ka" + key + "]");
 			Serial.print(cmd);
+			if ( ! Serial.available() ) {
+				httpd.sendContent("\n\n\n\n\n\n\n\n\n\n\n\n\n");
+				Serial.flush();
+				Serial.print(cmd);
+			}
 			
 			String result;
 			while ( Serial.available() > 0 ) {
@@ -182,6 +187,26 @@ void setup()
 			}
 			httpd.sendContent(result);
 		}
+		httpd.client().stop();
+	});
+	httpd.on("/key", HTTP_DELETE, [&](){
+		httpd.setContentLength(CONTENT_LENGTH_UNKNOWN);
+		String index = httpd.arg("index");
+		httpd.send(200, "text/html", "");
+		Serial.flush();
+		String cmd = String("[kd" + index + "]");
+		Serial.print(cmd);
+		if ( ! Serial.available() ) {
+			httpd.sendContent("\n\n\n\n\n\n\n\n\n\n\n\n\n");
+			Serial.flush();
+			Serial.print(cmd);
+		}
+		
+		String result;
+		while ( Serial.available() > 0 ) {
+			result += Serial.readString();
+		}
+		httpd.sendContent(result);
 		httpd.client().stop();
 	});
 	httpd.on("/unlock", [&](){
