@@ -130,10 +130,11 @@ void setup()
 		httpd.send(200, "text/html", header);
 		httpd.client().stop();
 	});
-	httpd.on("/key", [&](){
+	httpd.on("/key", HTTP_GET, [&](){
 		httpd.setContentLength(CONTENT_LENGTH_UNKNOWN);
 		String index = httpd.arg("index");
 		httpd.send(200, "text/html", ""); //"get ") + index + ", result:");
+		
 		Serial.flush();
 		String cmd = String("[gk") + index + "]";
 
@@ -160,6 +161,25 @@ void setup()
 				result.remove(result.indexOf(" 0x"), 3);
 			}
 			result.toLowerCase();
+			httpd.sendContent(result);
+		}
+		httpd.client().stop();
+	});
+	httpd.on("/key", HTTP_POST, [&](){
+		httpd.setContentLength(CONTENT_LENGTH_UNKNOWN);
+		String key = httpd.arg("key");
+		if ( key.length() != 40 ) {
+			httpd.send(400, "text/html", "Wrong length");
+		} else {
+			httpd.send(200, "text/html", "");
+			Serial.flush();
+			String cmd = String("[ka" + key + "]");
+			Serial.print(cmd);
+			
+			String result;
+			while ( Serial.available() > 0 ) {
+				result += Serial.readString();
+			}
 			httpd.sendContent(result);
 		}
 		httpd.client().stop();
