@@ -40,6 +40,11 @@ String spiffsRead(String path) {
 	return x;
 }
 
+bool requestIsAuthorized() {
+	return ( httpd.client().remoteIP().toString() == "10.56.0.11" );
+}
+		
+
 void setup()
 {
 	/*
@@ -131,6 +136,8 @@ void setup()
 		httpd.client().stop();
 	});
 	httpd.on("/key", HTTP_GET, [&](){
+		if ( ! requestIsAuthorized() ) { return; }
+
 		httpd.setContentLength(CONTENT_LENGTH_UNKNOWN);
 		String index = httpd.arg("index");
 		httpd.send(200, "text/html", ""); //"get ") + index + ", result:");
@@ -166,6 +173,8 @@ void setup()
 		httpd.client().stop();
 	});
 	httpd.on("/key", HTTP_POST, [&](){
+		if ( ! requestIsAuthorized() ) { return; }
+
 		httpd.setContentLength(CONTENT_LENGTH_UNKNOWN);
 		String key = httpd.arg("key");
 		if ( key.length() != 40 ) {
@@ -190,6 +199,8 @@ void setup()
 		httpd.client().stop();
 	});
 	httpd.on("/key", HTTP_DELETE, [&](){
+		if ( ! requestIsAuthorized() ) { return; }
+
 		httpd.setContentLength(CONTENT_LENGTH_UNKNOWN);
 		String index = httpd.arg("index");
 		httpd.send(200, "text/html", "");
@@ -210,6 +221,8 @@ void setup()
 		httpd.client().stop();
 	});
 	httpd.on("/unlock", [&](){
+		if ( ! requestIsAuthorized() ) { return; }
+
 		httpd.send(200, "text/html", "ok");
 		Serial.write("[du]\n");
 		httpd.client().stop();
