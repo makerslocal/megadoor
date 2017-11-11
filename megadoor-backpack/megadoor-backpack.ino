@@ -140,7 +140,8 @@ void setup()
 
 		httpd.setContentLength(CONTENT_LENGTH_UNKNOWN);
 		String index = httpd.arg("index");
-		httpd.send(200, "text/html", ""); //"get ") + index + ", result:");
+		httpd.send(200, "text/html", "");
+		//httpd.sendContent(index + ":");
 		
 		Serial.flush();
 		String cmd = String("[gk") + index + "]";
