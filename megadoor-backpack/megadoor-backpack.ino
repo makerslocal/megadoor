@@ -10,6 +10,8 @@
 
 #define VERSION 4
 
+ADC_MODE(ADC_VCC);
+
 HTTPClient http;
 ESP8266WebServer httpd(80);
 
@@ -159,6 +161,27 @@ void setup()
         httpd.setContentLength(CONTENT_LENGTH_UNKNOWN);
         httpd.send(200, "text/html", header);
         httpd.client().stop();
+    });
+    httpd.on("/debug", [&](){
+        String content = header;
+        content += ("<h1>About</h1><ul>");
+
+        unsigned long uptime = millis();
+        content += (String("<li>Version ") + VERSION + "</li>");
+        content += (String("<li>Booted about ") + (uptime/60000) + " minutes ago (" + ESP.getResetReason() + ")</li>");
+        content += (String("<li>Raw Vcc (probably not accurate): ") + ESP.getVcc() + "</li>");
+        content += ("</ul>");
+
+        content += (R"(
+            <h2>Debugging buttons (don't touch)</h2>
+            <form method='POST' action='/debug/reset'>
+                <button type='submit'>Restart</button>
+            </form>
+            <form method='POST' action='/debug/disconnect'>
+                <button type='submit'>Forget connection info</button>
+            </form>
+        )");
+        httpd.send(200, "text/html", content);
     });
     httpd.on("/key", HTTP_GET, [&](){
         if ( ! requestIsAuthorized() ) { return; }
