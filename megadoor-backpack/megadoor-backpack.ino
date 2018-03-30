@@ -81,6 +81,9 @@ void setup()
 		//Serial.print("Welcome to v"); Serial.println(VERSION);
 	}
 
+    //Serial.println("Setting up pins");
+    pinMode(D1, OUTPUT);
+
 	//Serial.println("Starting wireless.");
 	WiFi.hostname("megadoor-backpack");
 	WiFiManager wifiManager; //Load the Wi-Fi Manager library.
@@ -243,12 +246,17 @@ void setup()
 		httpd.sendContent(result);
 		httpd.client().stop();
 	});
-	httpd.on("/unlock", [&](){
+	httpd.on("/unlock", HTTP_POST, [&](){
 		if ( ! requestIsAuthorized() ) { return; }
+
+        digitalWrite(D1, HIGH);
 
 		httpd.send(200, "text/html", "ok");
 		Serial.write("[du]\n");
 		httpd.client().stop();
+
+        delay(200);
+        digitalWrite(D1, LOW);
 	});
 	httpd.begin();
 
