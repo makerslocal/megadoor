@@ -5,10 +5,10 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266mDNS.h>
 #include <WiFiUdp.h>
-#include <ArduinoOTA.h>
 #include <SoftwareSerial.h>
+#include <ESP8266httpUpdate.h>
 
-#define VERSION 3
+#define VERSION 4
 
 HTTPClient http;
 ESP8266WebServer httpd(80);
@@ -41,7 +41,11 @@ String spiffsRead(String path) {
 }
 
 bool requestIsAuthorized() {
-	return ( httpd.client().remoteIP().toString() == "10.56.0.11" );
+    String ip = httpd.client().remoteIP().toString();
+    if ( ip.startsWith("10.56.5.") ) {
+        return true; //It's the remote Web server.
+    }
+	return ( ip == "10.56.0.11" );
 }
 		
 
@@ -89,20 +93,38 @@ void setup()
 	//Serial.print("WiFi connected: ");
 	//Serial.println(WiFi.localIP());
 
-	/*
-	Serial.println("Starting OTA.");
-	ArduinoOTA.onError([](ota_error_t error) {
-		Serial.printf("Error[%u]: ", error);
-		if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
-		else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
-		else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
-		else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
-		else if (error == OTA_END_ERROR) Serial.println("End Failed");
-	});
-	*/
-	ArduinoOTA.begin();
-
 	//Serial.println("Starting Web server.");
+    httpd.on("/update", HTTP_POST, [&](){
+        httpd.sendHeader("Connection", "close");
+        httpd.sendHeader("Access-Control-Allow-Origin", "*");
+        httpd.send(200, "text/plain", (Update.hasError())?"FAIL":"OK");
+    },[&](){
+        // handler for the file upload, get's the sketch bytes, and writes
+        // them through the Update object
+        HTTPUpload& upload = httpd.upload();
+        if(upload.status == UPLOAD_FILE_START){
+            if ( !requestIsAuthorized ) {
+                return;
+            }
+            uint32_t maxSketchSpace = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;
+            if(!Update.begin(maxSketchSpace)){//start with max available size
+                //it failed because it was too big
+            }
+        } else if(upload.status == UPLOAD_FILE_WRITE){
+            if(Update.write(upload.buf, upload.currentSize) != upload.currentSize){
+                //it failed to write
+            }
+        } else if(upload.status == UPLOAD_FILE_END){
+            if(Update.end(true)){ //true to set the size to the current progress
+                ESP.restart();
+            } else {
+                //it failed for some reason
+            }
+        } else if(upload.status == UPLOAD_FILE_ABORTED){
+            Update.end();
+        }
+        delay(0);
+    });
 	httpd.on("/style.css", [&](){
 		httpd.send(200, "text/css",R"(
 			html {
@@ -240,7 +262,6 @@ void setup()
 void loop()
 {
 	
-	ArduinoOTA.handle();
 	httpd.handleClient();
 
 }
