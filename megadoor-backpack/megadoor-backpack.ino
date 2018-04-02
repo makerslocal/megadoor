@@ -8,7 +8,7 @@
 #include <SoftwareSerial.h>
 #include <ESP8266httpUpdate.h>
 
-#define VERSION 4
+#define VERSION 6
 
 ADC_MODE(ADC_VCC);
 
@@ -88,11 +88,15 @@ void setup()
 
     //Serial.println("Starting wireless.");
     WiFi.hostname("megadoor-backpack");
+    WiFi.onStationModeDisconnected([](const WiFiEventStationModeDisconnected& event) {
+        delay(30000);
+        ESP.restart();
+    });
     WiFiManager wifiManager; //Load the Wi-Fi Manager library.
     wifiManager.setTimeout(300); //Give up with the AP if no users gives us configuration in this many secs.
     if(!wifiManager.autoConnect("megadoor-backpack Setup")) {
         //Serial.println("failed to connect and hit timeout");
-        delay(3000);
+        delay(30000);
         ESP.restart();
     }
     //Serial.print("WiFi connected: ");
@@ -295,7 +299,11 @@ void loop()
     
     httpd.handleClient();
 
-}
+    if ( WiFi.status() != WL_CONNECTED ) {
+        delay(30000);
+        ESP.restart();
+    }
 
+}
 
 
